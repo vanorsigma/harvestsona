@@ -1,0 +1,13 @@
+{
+  "name": "@harvestsona/database",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@harvestsona/shared": "workspace:*",
+    "@harvestsona/domain": "workspace:*",
+    "drizzle-orm": "^0.45.2"
+  }
+}

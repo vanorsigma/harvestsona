@@ -1,0 +1,94 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "enduser",
+  "compatibility_date": "2026-06-27",
+  "compatibility_flags": ["nodejs_als", "nodejs_compat"],
+  "main": ".svelte-kit/cloudflare/_worker.js",
+  "assets": {
+    "binding": "ASSETS",
+    "directory": ".svelte-kit/cloudflare"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "harvestsona-db",
+      "migrations_dir": "./drizzle"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "UPLOAD_BUCKET",
+      "bucket_name": "harvestsona-uploads-na"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "WEBSOCKET_SERVICE",
+        "class_name": "WebSocketService"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["WebSocketService"]
+    }
+  ],
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true
+    }
+  },
+  "limits": {
+    "cpu_ms": 60000
+  },
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    {
+      "pattern": "harvestsonas.catmaid.dev",
+      "zone_name": "catmaid.dev",
+      "custom_domain": true,
+      "enabled": true,
+      "previews_enabled": false
+    }
+  ],
+  "env": {
+    "staging": {
+      "name": "enduser-stg",
+      "routes": [
+        {
+          "pattern": "harvestsonas-stg.catmaid.dev",
+          "zone_name": "catmaid.dev",
+          "custom_domain": true,
+          "enabled": true,
+          "previews_enabled": false
+        }
+      ],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "harvestsona-db-stg",
+          "database_id": "dad42136-c15e-4e81-b459-81791b7fa328",
+          "migrations_dir": "./drizzle"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "UPLOAD_BUCKET",
+          "bucket_name": "harvestsona-uploads-stg"
+        }
+      ],
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "WEBSOCKET_SERVICE",
+            "class_name": "WebSocketService"
+          }
+        ]
+      }
+    }
+  }
+}

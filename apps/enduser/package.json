@@ -1,0 +1,62 @@
+{
+  "name": "enduser",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "wrangler types --check && vite build && sveltekit-cloudflare-do --do src/lib/server/websocket.ts",
+    "preview": "wrangler dev .svelte-kit/cloudflare/_worker.js --port 4173",
+    "prepare": "svelte-kit sync || echo ''",
+    "check": "wrangler types --check && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+    "lint": "prettier --check . && eslint .",
+    "format": "prettier --write .",
+    "db:push": "drizzle-kit push",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "auth:schema": "better-auth generate --config src/lib/server/auth.ts --output ../../pkgs/database/src/schema/auth.schema.ts --yes",
+    "gen": "wrangler types"
+  },
+  "sveltekit-cloudflare-do": {
+    "durableObjects": [
+      "src/lib/server/websocket.ts"
+    ]
+  },
+  "dependencies": {
+    "@cloudflare/workers-types": "^5.20260729.1",
+    "@harvestsona/database": "workspace:*",
+    "@harvestsona/domain": "workspace:*",
+    "@harvestsona/shared": "workspace:*",
+    "@harvestsona/storage": "workspace:*",
+    "better-auth": "^1.6.25",
+    "file-type": "^22.0.1",
+    "jose": "^6.2.4",
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "@eslint/compat": "^2.0.4",
+    "@eslint/js": "^10.0.1",
+    "@sveltejs/adapter-cloudflare": "^7.2.9",
+    "@sveltejs/kit": "^2.57.0",
+    "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "@types/node": "^24",
+    "@types/ws": "^8.18.1",
+    "drizzle-kit": "^0.31.10",
+    "drizzle-orm": "^0.45.2",
+    "eslint": "^10.2.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-svelte": "^3.17.0",
+    "globals": "^17.4.0",
+    "prettier": "^3.8.1",
+    "prettier-plugin-svelte": "^3.5.1",
+    "svelte": "^5.55.2",
+    "svelte-check": "^4.4.6",
+    "sveltekit-cloudflare-durable-objects": "^0.1.1",
+    "typescript": "^6.0.2",
+    "typescript-eslint": "^8.58.1",
+    "vite": "^7.3.6",
+    "wrangler": "^4.115.0"
+  }
+}

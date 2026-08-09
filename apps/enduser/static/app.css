@@ -1,0 +1,276 @@
+@font-face {
+  font-family: "Yakumo Preschool Hand";
+  src: url("./fonts/YakumoPreschoolHand.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Melon Honey";
+  src: url("./fonts/Melon Honey.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Darumadrop One";
+  src: url("./fonts/DarumadropOne-Regular.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Fot Yuruka";
+  src: url("./fonts/fot-yuruka-std.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+}
+
+:root {
+  --bg: #f5fff3;
+
+  --green-1: #dff7dc;
+  --green-2: #b9e8b1;
+  --green-3: #78c26d;
+
+  --red-1: #ffd9d9;
+  --red-2: #ffb3b3;
+  --red-3: #d95c5c;
+
+  --text: #243224;
+  --muted: #607060;
+
+  --white: #ffffff;
+
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+
+  --radius-lg: 20px;
+  --radius-md: 14px;
+  --radius-sm: 10px;
+
+  --transition: 180ms ease;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.font-preschool {
+  font-family: "Yakumo Preschool Hand", Inter, system-ui, sans-serif;
+}
+
+.font-melonhoney {
+  font-family: "Melon Honey", Inter, system-ui, sans-serif;
+}
+
+.font-darumadropone {
+  font-family: "Darumadrop One", Inter, system-ui, sans-serif;
+}
+
+.font-fotyuruka {
+  font-family: "Fot Yuruka", Inter, system-ui, sans-serif;
+}
+
+body {
+  position: relative;
+  margin: 0;
+  padding: 2rem;
+  width: 100vw;
+  height: 100vh;
+  color: var(--text);
+  font-family: "Darumadrop One", Inter, system-ui, sans-serif;
+  background: repeating-linear-gradient(135deg, var(--green-1) 0px, var(--green-1) 30px, var(--red-1) 30px, var(--red-1) 60px);
+  background-attachment: fixed;
+}
+
+body > div {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.container, .card {
+  background: rgba(255, 255, 255, 0.9);
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
+}
+
+.card + .card {
+  margin-top: 1rem;
+}
+
+h1, h2, h3 {
+  margin-top: 0;
+  letter-spacing: -0.02em;
+}
+
+p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+input, textarea, select {
+  width: 100%;
+  padding: 0.9rem 1rem;
+  border-radius: var(--radius-md);
+  border: 2px solid transparent;
+  background: #ffffff;
+  color: var(--text);
+  font-size: 1rem;
+  transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--green-3);
+  box-shadow:
+    0 0 0 4px rgba(120, 194, 109, 0.2);
+}
+
+textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+button, .btn {
+  appearance: none;
+  border: none;
+
+  cursor: pointer;
+
+  padding: 0.9rem 1.4rem;
+
+  border-radius: var(--radius-md);
+
+  font-size: 1rem;
+  font-weight: 700;
+
+  transition:
+    transform var(--transition),
+    box-shadow var(--transition),
+    opacity var(--transition);
+
+  box-shadow:
+    0 6px 18px rgba(0, 0, 0, 0.12);
+}
+
+button:hover, .btn:hover {
+  transform: translateY(-2px);
+}
+
+button:active, .btn:active {
+  transform: translateY(1px);
+}
+
+.btn-green {
+  background: linear-gradient(180deg, #98df8a, #5daa52);
+  color: white;
+}
+
+.btn-green:hover {
+  box-shadow: 0 10px 24px rgba(93, 170, 82, 0.35);
+}
+
+.btn-red {
+  background: linear-gradient(180deg, #ff9d9d, #d95c5c);
+  color: white;
+}
+
+.btn-red:hover {
+  box-shadow: 0 10px 24px rgba(217, 92, 92, 0.35);
+}
+
+.file-upload {
+  position: relative;
+  border: 3px dashed var(--green-3);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(223, 247, 220, 0.8), rgba(255, 255, 255, 0.95));
+  padding: 2rem;
+  text-align: center;
+  transition: border-color var(--transition), transform var(--transition), background var(--transition);
+}
+
+.file-upload:hover {
+  transform: translateY(-2px);
+  border-color: var(--red-3);
+  background: linear-gradient(180deg, rgba(255, 217, 217, 0.7), rgba(255, 255, 255, 0.95));
+}
+
+.file-upload input[type="file"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.file-upload-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 0.4rem;
+}
+
+.file-upload-subtitle {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.col {
+  flex: 1;
+  min-width: 220px;
+}
+
+.spacer {
+  height: 1rem;
+}
+
+.center {
+  text-align: center;
+}
+
+.success-box {
+  background: rgba(120, 194, 109, 0.15);
+  border-left: 6px solid var(--green-3);
+  padding: 1rem;
+  border-radius: var(--radius-md);
+}
+
+.error-box {
+  background: rgba(217, 92, 92, 0.12);
+  border-left: 6px solid var(--red-3);
+  padding: 1rem;
+  border-radius: var(--radius-md);
+}
+
+.error-container {
+  max-width: 480px;
+  margin: 2rem auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.error-container h1 {
+  font-size: 1.5rem;
+}
+
+.error-container p {
+  font-size: 1rem;
+}

@@ -1,0 +1,11 @@
+{
+  "name": "@harvestsona/domain",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@harvestsona/shared": "workspace:*"
+  }
+}
