@@ -19,12 +19,12 @@ use tauri::{
     tray::TrayIconBuilder,
     AppHandle, Emitter as _, Manager as _, Url, Wry,
 };
-use tauri_plugin_store::StoreExt;
 use tauri_plugin_dialog::{DialogExt as _, MessageDialogKind};
 use tauri_plugin_log::{
     log::{self, info, warn},
     Target, TargetKind,
 };
+use tauri_plugin_store::StoreExt;
 
 use tray::tray_menu_handler;
 use websocket::ws_listen_to_updates;
@@ -171,8 +171,8 @@ fn app_setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error + 'st
     let config: AppConfig = serde_json::from_value(serde_json::Value::Object(config_map))?;
     let cookie_vault = CookieVault::try_from_filename(
         &cookie_file_path
-            .into_string()
-            .map_err(|e| e.to_string_lossy().to_string())?,
+            .to_str()
+            .ok_or("cannot get cookie file path")?,
     );
 
     let client = reqwest::Client::builder()
@@ -182,13 +182,7 @@ fn app_setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error + 'st
         .expect("Should be able to build reqwest with offline cookie store");
 
     let logout_i = MenuItem::with_id(app, "logout", "Logout", true, None::<&str>)?;
-    let sync_i = MenuItem::with_id(
-        app,
-        "sync_popup",
-        "Sync...",
-        false,
-        None::<&str>,
-    )?;
+    let sync_i = MenuItem::with_id(app, "sync_popup", "Sync...", false, None::<&str>)?;
     let update_host_url_i = MenuItem::with_id(
         app,
         "update_host_url",
@@ -196,8 +190,7 @@ fn app_setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error + 'st
         true,
         None::<&str>,
     )?;
-    let open_logs_i =
-        MenuItem::with_id(app, "open_logs", "Open Logs Folder", true, None::<&str>)?;
+    let open_logs_i = MenuItem::with_id(app, "open_logs", "Open Logs Folder", true, None::<&str>)?;
     let clear_app_data_i = MenuItem::with_id(
         app,
         "clear_app_data",
@@ -309,5 +302,9 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|handle, event| if let tauri::RunEvent::Exit = event { app_quit(handle) });
+        .run(|handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                app_quit(handle)
+            }
+        });
 }

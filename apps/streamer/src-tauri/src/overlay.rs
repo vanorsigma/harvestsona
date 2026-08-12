@@ -18,6 +18,7 @@ use axum::{
 };
 use tauri_plugin_log::log::{error, info, warn};
 use tokio::sync::broadcast;
+use tower_http::cors::CorsLayer;
 
 const OBS_HTML: &str = include_str!("../statics/obs.html");
 const OBS_JS: &str = include_str!("../statics/obs.js");
@@ -176,6 +177,7 @@ pub fn overlay(default_image: Arc<RwLock<PathBuf>>, mapping: Arc<RwLock<HashMap<
             .route("/harvestsona/{username}", get(handle_get_harvestona))
             .route("/harvestsona.png", get(default_harvestsona))
             .route("/expression.gif", get(expression_gif))
+            .layer(CorsLayer::permissive())
             .with_state(state);
 
         let addr = SocketAddr::from(([127, 0, 0, 1], 8987));

@@ -19,7 +19,7 @@
     "@typescript-eslint/parser": "^8.60.1",
     "eslint": "^10.4.0",
     "prettier": "^3.8.3",
-    "turbo": "^2.9.14",
+    "turbo": "^2.10.9",
     "wrangler": "^4.110.0"
   },
   "peerDependencies": {
