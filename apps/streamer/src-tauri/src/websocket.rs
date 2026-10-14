@@ -1,4 +1,4 @@
-use futures_util::StreamExt as _;
+use futures_util::{SinkExt as _, StreamExt as _};
 use reqwest::header::{CONNECTION, UPGRADE};
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -6,7 +6,7 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter as _, Manager as _, Url};
 use tauri_plugin_log::log::{error, info, warn};
-use tokio_tungstenite::tungstenite::protocol::Message;
+use tokio_tungstenite::tungstenite::{protocol::Message, Bytes};
 
 use crate::AppClient;
 
@@ -17,6 +17,20 @@ struct MappingEntry {
 }
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+
+const RECONNECT_BACKOFF: [Duration; 5] = [
+    Duration::from_secs(10),
+    Duration::from_secs(30),
+    Duration::from_secs(60),
+    Duration::from_secs(120),
+    Duration::from_secs(300),
+];
+
+const MIN_STABLE_CONNECTION: Duration = Duration::from_secs(60);
+
+const PING_INTERVAL: Duration = Duration::from_secs(30);
+
+const READ_IDLE_TIMEOUT: Duration = Duration::from_secs(90);
 
 async fn refresh_mapping(
     client: &reqwest::Client,
@@ -40,20 +54,16 @@ async fn refresh_mapping(
         }
     };
 
-    let resp = match tokio::time::timeout(REQUEST_TIMEOUT, client.get(url).send()).await {
-        Ok(Ok(resp)) => resp,
-        Ok(Err(e)) => {
+    let resp = match client.get(url).timeout(REQUEST_TIMEOUT).send().await {
+        Ok(resp) => resp,
+        Err(e) => {
             error!("Failed to fetch mappings: {:?}", e);
-            return;
-        }
-        Err(_) => {
-            error!("Timed out fetching mappings after {:?}", REQUEST_TIMEOUT);
             return;
         }
     };
 
-    match tokio::time::timeout(REQUEST_TIMEOUT, resp.json::<Vec<MappingEntry>>()).await {
-        Ok(Ok(entries)) => {
+    match resp.json::<Vec<MappingEntry>>().await {
+        Ok(entries) => {
             let mut map = mapping.write().unwrap();
             map.clear();
             for entry in entries {
@@ -67,27 +77,11 @@ async fn refresh_mapping(
             }
             info!("Updated mapping with {} entries", map.len());
         }
-        Ok(Err(e)) => {
+        Err(e) => {
             error!("Failed to parse mapping response: {:?}", e);
-        }
-        Err(_) => {
-            error!(
-                "Timed out reading mapping response after {:?}",
-                REQUEST_TIMEOUT
-            );
         }
     }
 }
-
-const RECONNECT_BACKOFF: [Duration; 5] = [
-    Duration::from_secs(10),
-    Duration::from_secs(30),
-    Duration::from_secs(60),
-    Duration::from_secs(120),
-    Duration::from_secs(300),
-];
-
-const MIN_STABLE_CONNECTION: Duration = Duration::from_secs(60);
 
 fn next_reconnect(step: usize, stable: bool) -> (Duration, usize) {
     let step = if stable {
@@ -116,19 +110,22 @@ async fn run_connection(
     };
     info!("Connecting WebSocket to {}", url);
 
-    let request = client
-        .get(url.clone())
-        .version(reqwest::Version::HTTP_11) // HTTP/2 specs drops Upgrade & Connection headers
-        .header(UPGRADE, "websocket")
-        .header(CONNECTION, "Upgrade")
-        .header("Sec-WebSocket-Version", "13")
-        .header(
-            "Sec-WebSocket-Key",
-            tokio_tungstenite::tungstenite::handshake::client::generate_key(),
-        )
-        .send();
-
-    let response = match tokio::time::timeout(REQUEST_TIMEOUT, request).await {
+    let response = match tokio::time::timeout(
+        REQUEST_TIMEOUT,
+        client
+            .get(url.clone())
+            .version(reqwest::Version::HTTP_11) // HTTP/2 specs drops Upgrade & Connection headers
+            .header(UPGRADE, "websocket")
+            .header(CONNECTION, "Upgrade")
+            .header("Sec-WebSocket-Version", "13")
+            .header(
+                "Sec-WebSocket-Key",
+                tokio_tungstenite::tungstenite::handshake::client::generate_key(),
+            )
+            .send(),
+    )
+    .await
+    {
         Ok(Ok(res)) => {
             info!(
                 "WebSocket upgrade request succeeded (status: {})",
@@ -146,13 +143,17 @@ async fn run_connection(
         }
     };
 
-    let upgraded_stream = match response.upgrade().await {
-        Ok(res) => {
+    let upgraded_stream = match tokio::time::timeout(REQUEST_TIMEOUT, response.upgrade()).await {
+        Ok(Ok(res)) => {
             info!("WebSocket connection upgraded successfully to {}", url);
             res
         }
-        Err(e) => {
+        Ok(Err(e)) => {
             error!("Cannot upgrade connection to {}: {:?}", url, e);
+            return false;
+        }
+        Err(_) => {
+            error!("Timed out completing WebSocket upgrade to {}", url);
             return false;
         }
     };
@@ -164,26 +165,48 @@ async fn run_connection(
     )
     .await;
 
-    let (_, mut read) = ws_stream.split();
+    let (mut write, mut read) = ws_stream.split();
     let connected_at = tokio::time::Instant::now();
     const MAPPING_REFRESH_COOLDOWN: Duration = Duration::from_millis(500);
 
     refresh_mapping(client, enduser_origin, handle, mapping).await;
     let mut last_refresh = tokio::time::Instant::now();
 
-    while let Some(message) = read.next().await {
-        match message {
-            Ok(Message::Text(text)) => {
-                let _ = handle.emit("sync-ws", text.as_str());
-                if last_refresh.elapsed() >= MAPPING_REFRESH_COOLDOWN {
-                    refresh_mapping(client, enduser_origin, handle, mapping).await;
-                    last_refresh = tokio::time::Instant::now();
+    let mut ping = tokio::time::interval(PING_INTERVAL);
+    ping.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    ping.tick().await;
+
+    loop {
+        tokio::select! {
+            _ = ping.tick() => {
+                if let Err(e) = write.send(Message::Ping(Bytes::new())).await {
+                    warn!("WebSocket keepalive ping to {} failed: {:?}", url, e);
+                    break;
                 }
             }
-            Ok(_) => {}
-            Err(e) => {
-                error!("WebSocket read error from {}: {:?}", url, e);
-                break;
+            message = tokio::time::timeout(READ_IDLE_TIMEOUT, read.next()) => {
+                match message {
+                    Ok(Some(Ok(Message::Text(text)))) => {
+                        let _ = handle.emit("sync-ws", text.as_str());
+                        if last_refresh.elapsed() >= MAPPING_REFRESH_COOLDOWN {
+                            refresh_mapping(client, enduser_origin, handle, mapping).await;
+                            last_refresh = tokio::time::Instant::now();
+                        }
+                    }
+                    Ok(Some(Ok(_))) => {}
+                    Ok(Some(Err(e))) => {
+                        error!("WebSocket read error from {}: {:?}", url, e);
+                        break;
+                    }
+                    Ok(None) => break,
+                    Err(_) => {
+                        warn!(
+                            "WebSocket idle for {:?} with no frames or pongs; assuming {} is dead",
+                            READ_IDLE_TIMEOUT, url
+                        );
+                        break;
+                    }
+                }
             }
         }
     }
@@ -205,7 +228,10 @@ pub fn ws_listen_to_updates(handle: AppHandle, mapping: Arc<RwLock<HashMap<Strin
             let stable = run_connection(&client, &enduser_origin, &handle, &mapping).await;
 
             let (delay, next) = next_reconnect(step, stable);
-            info!("Reconnecting to {} in {:?}", enduser_origin, delay);
+            info!(
+                "Reconnecting WebSocket to {} in {:?}",
+                enduser_origin, delay
+            );
             tokio::time::sleep(delay).await;
             step = next;
         }
