@@ -27,7 +27,7 @@ tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 tauri-plugin-notification = "2"
 tauri-plugin-fs = { version = "2", features = ["watch"] }
 reqwest = { version = "0.13.4", features = ["json", "stream", "cookies"] }
-tokio = { version = "1.52.3", features = ["fs", "io-util"] }
+tokio = { version = "1.52.3", features = ["fs", "io-util", "time"] }
 anyhow = "1.0.103"
 thiserror = "2.0.18"
 reqwest_cookie_store = { version = "0.10.0", features = ["serde"] }

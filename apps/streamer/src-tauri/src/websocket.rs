@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter as _, Manager as _, Url};
-use tauri_plugin_log::log::{error, info};
+use tauri_plugin_log::log::{error, info, warn};
 use tokio_tungstenite::tungstenite::protocol::Message;
 
 use crate::AppClient;
@@ -72,8 +72,18 @@ const RECONNECT_BACKOFF: [Duration; 5] = [
     Duration::from_secs(300),
 ];
 
-fn reconnect_delay(step: usize) -> Duration {
-    RECONNECT_BACKOFF[step.min(RECONNECT_BACKOFF.len() - 1)]
+const MIN_STABLE_CONNECTION: Duration = Duration::from_secs(60);
+
+fn next_reconnect(step: usize, stable: bool) -> (Duration, usize) {
+    let step = if stable {
+        0
+    } else {
+        step.min(RECONNECT_BACKOFF.len() - 1)
+    };
+    (
+        RECONNECT_BACKOFF[step],
+        (step + 1).min(RECONNECT_BACKOFF.len() - 1),
+    )
 }
 
 async fn run_connection(
@@ -136,20 +146,29 @@ async fn run_connection(
     .await;
 
     let (_, mut read) = ws_stream.split();
+    let connected_at = tokio::time::Instant::now();
     let mut last_refresh = tokio::time::Instant::now();
     const MAPPING_REFRESH_COOLDOWN: Duration = Duration::from_millis(500);
 
     while let Some(message) = read.next().await {
-        if let Ok(Message::Text(text)) = message {
-            let _ = handle.emit("sync-ws", text.as_str());
-            if last_refresh.elapsed() >= MAPPING_REFRESH_COOLDOWN {
-                refresh_mapping(client, enduser_origin, handle, mapping).await;
-                last_refresh = tokio::time::Instant::now();
+        match message {
+            Ok(Message::Text(text)) => {
+                let _ = handle.emit("sync-ws", text.as_str());
+                if last_refresh.elapsed() >= MAPPING_REFRESH_COOLDOWN {
+                    refresh_mapping(client, enduser_origin, handle, mapping).await;
+                    last_refresh = tokio::time::Instant::now();
+                }
+            }
+            Ok(_) => {}
+            Err(e) => {
+                error!("WebSocket read error from {}: {:?}", url, e);
+                break;
             }
         }
     }
 
-    true
+    warn!("WebSocket connection to {} lost", url);
+    connected_at.elapsed() >= MIN_STABLE_CONNECTION
 }
 
 pub fn ws_listen_to_updates(handle: AppHandle, mapping: Arc<RwLock<HashMap<String, String>>>) {
@@ -159,19 +178,16 @@ pub fn ws_listen_to_updates(handle: AppHandle, mapping: Arc<RwLock<HashMap<Strin
 
     tauri::async_runtime::spawn(async move {
         info!("WebSocket endpoint origin: {}", enduser_origin);
+        refresh_mapping(&client, &enduser_origin, &handle, &mapping).await;
 
         let mut step = 0usize;
         loop {
-            refresh_mapping(&client, &enduser_origin, &handle, &mapping).await;
+            let stable = run_connection(&client, &enduser_origin, &handle, &mapping).await;
 
-            if run_connection(&client, &enduser_origin, &handle, &mapping).await {
-                step = 0;
-            }
-
-            let delay = reconnect_delay(step);
-            info!("WebSocket disconnected; reconnecting in {:?}", delay);
+            let (delay, next) = next_reconnect(step, stable);
+            info!("Reconnecting to {} in {:?}", enduser_origin, delay);
             tokio::time::sleep(delay).await;
-            step += 1;
+            step = next;
         }
     });
 }
