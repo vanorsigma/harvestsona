@@ -16,6 +16,8 @@ struct MappingEntry {
     image: String,
 }
 
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+
 async fn refresh_mapping(
     client: &reqwest::Client,
     enduser_origin: &Url,
@@ -38,28 +40,41 @@ async fn refresh_mapping(
         }
     };
 
-    match client.get(url).send().await {
-        Ok(resp) => match resp.json::<Vec<MappingEntry>>().await {
-            Ok(entries) => {
-                let mut map = mapping.write().unwrap();
-                map.clear();
-                for entry in entries {
-                    let image_path = harvestsonas_dir.join(&entry.image);
-                    info!(
-                        "mapping: username={} -> file={}",
-                        entry.username,
-                        image_path.display()
-                    );
-                    map.insert(entry.username, image_path.to_string_lossy().to_string());
-                }
-                info!("Updated mapping with {} entries", map.len());
-            }
-            Err(e) => {
-                error!("Failed to parse mapping response: {:?}", e);
-            }
-        },
-        Err(e) => {
+    let resp = match tokio::time::timeout(REQUEST_TIMEOUT, client.get(url).send()).await {
+        Ok(Ok(resp)) => resp,
+        Ok(Err(e)) => {
             error!("Failed to fetch mappings: {:?}", e);
+            return;
+        }
+        Err(_) => {
+            error!("Timed out fetching mappings after {:?}", REQUEST_TIMEOUT);
+            return;
+        }
+    };
+
+    match tokio::time::timeout(REQUEST_TIMEOUT, resp.json::<Vec<MappingEntry>>()).await {
+        Ok(Ok(entries)) => {
+            let mut map = mapping.write().unwrap();
+            map.clear();
+            for entry in entries {
+                let image_path = harvestsonas_dir.join(&entry.image);
+                info!(
+                    "mapping: username={} -> file={}",
+                    entry.username,
+                    image_path.display()
+                );
+                map.insert(entry.username, image_path.to_string_lossy().to_string());
+            }
+            info!("Updated mapping with {} entries", map.len());
+        }
+        Ok(Err(e)) => {
+            error!("Failed to parse mapping response: {:?}", e);
+        }
+        Err(_) => {
+            error!(
+                "Timed out reading mapping response after {:?}",
+                REQUEST_TIMEOUT
+            );
         }
     }
 }
@@ -101,7 +116,7 @@ async fn run_connection(
     };
     info!("Connecting WebSocket to {}", url);
 
-    let response = match client
+    let request = client
         .get(url.clone())
         .version(reqwest::Version::HTTP_11) // HTTP/2 specs drops Upgrade & Connection headers
         .header(UPGRADE, "websocket")
@@ -111,18 +126,22 @@ async fn run_connection(
             "Sec-WebSocket-Key",
             tokio_tungstenite::tungstenite::handshake::client::generate_key(),
         )
-        .send()
-        .await
-    {
-        Ok(res) => {
+        .send();
+
+    let response = match tokio::time::timeout(REQUEST_TIMEOUT, request).await {
+        Ok(Ok(res)) => {
             info!(
                 "WebSocket upgrade request succeeded (status: {})",
                 res.status()
             );
             res
         }
-        Err(e) => {
+        Ok(Err(e)) => {
             error!("Cannot request connection upgrade to {}: {:?}", url, e);
+            return false;
+        }
+        Err(_) => {
+            error!("Timed out requesting connection upgrade to {}", url);
             return false;
         }
     };
@@ -147,8 +166,10 @@ async fn run_connection(
 
     let (_, mut read) = ws_stream.split();
     let connected_at = tokio::time::Instant::now();
-    let mut last_refresh = tokio::time::Instant::now();
     const MAPPING_REFRESH_COOLDOWN: Duration = Duration::from_millis(500);
+
+    refresh_mapping(client, enduser_origin, handle, mapping).await;
+    let mut last_refresh = tokio::time::Instant::now();
 
     while let Some(message) = read.next().await {
         match message {
@@ -178,7 +199,6 @@ pub fn ws_listen_to_updates(handle: AppHandle, mapping: Arc<RwLock<HashMap<Strin
 
     tauri::async_runtime::spawn(async move {
         info!("WebSocket endpoint origin: {}", enduser_origin);
-        refresh_mapping(&client, &enduser_origin, &handle, &mapping).await;
 
         let mut step = 0usize;
         loop {
